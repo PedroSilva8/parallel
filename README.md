@@ -8,7 +8,7 @@ __Pros__
 
 __Cons__
 
-- doesn't guarantte processing order (obviously)
+- doesn't guarantee processing order (obviously)
 - when breaking doesn't guarantte that others threads do it instantly
 - no nesting (for now)
 - FIFO is currently the only method to process data
@@ -43,3 +43,9 @@ normal "foreach" loop
         return true;
     });
 ```
+
+# building
+## Linux
+CMake and CPP base-kit development tools should be enough
+## Windows
+this library uses MinGW to compile for windows, cmake and base-devel for MinGW should be enough
