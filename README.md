@@ -11,6 +11,7 @@ __Cons__
 - doesn't guarantte processing order (obviously)
 - when breaking doesn't guarantte that others threads do it instantly
 - no nesting (for now)
+- FIFO is currently the only method to process data
 
 # example
 for a full example you can go [here](test/test.cpp)

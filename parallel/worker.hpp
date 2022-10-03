@@ -17,6 +17,8 @@ namespace pl {
         PARALLEL_JOB_TYPE_FOREACH
     };
 
+    class parallel_job_base;
+
     ///class used to allow communication between main thread and workers and between workers
     class parallel_job_parent {
     private:
@@ -26,6 +28,7 @@ namespace pl {
     public:
         //condition variable used to warn main thread that a thread has finished or others threads to quit
         std::condition_variable cv;
+        std::vector<parallel_job_base*> jobs;
 
         //tell threads to force quit current job
         inline void force_quit() {
@@ -39,6 +42,9 @@ namespace pl {
 
         //check if it should force quit current job
         inline bool should_force_quit() const { return _force_quit; }
+
+        //check if all jobas have finished
+        bool has_finished();
     };
 
     ///base class for parallel jobs, contains all necessary information and functions

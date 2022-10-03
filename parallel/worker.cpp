@@ -3,6 +3,10 @@
 
 using namespace pl;
 
+bool parallel_job_parent::has_finished() {
+    return std::all_of(jobs.begin(), jobs.end(), [](parallel_job_base* j) { return j->finished; });
+}
+
 parallel_job_base::parallel_job_base(size_t _start, size_t _size, parallel_job_parent* _parent, parallel_job_type _type) {
     start = _start;
     size = _size;

@@ -1,9 +1,19 @@
 #include "parallel.hpp"
-
+#include <chrono>
 using namespace pl;
 
 unsigned int parallel::n_threads = -1;
 parallel_worker** parallel::threads;
+
+void parallel::wait_jobs_finish(parallel_job_parent* _parent, int timeout) {
+    if (_parent == nullptr)
+        return;
+
+    std::mutex mtx;
+    std::unique_lock<std::mutex> l(mtx);
+    while (!_parent->has_finished())
+        _parent->cv.wait_for(l, std::chrono::milliseconds(timeout) , [&]{ return _parent->has_finished(); } );
+}
 
 void parallel::init(parallel_cores _cores, unsigned int _n_cores) {
     n_threads = -1;

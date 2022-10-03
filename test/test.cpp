@@ -9,10 +9,11 @@ auto start = high_resolution_clock::now();
 
 inline void start_timer() { start = high_resolution_clock::now(); }
 
-inline void stop_timer(const char* prefix) {
+inline long long stop_timer(const char* prefix) {
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
-    std::cout << prefix << duration.count() << std::endl;
+    std::cout << prefix << duration.count() << "ms" << std::endl;
+    return duration.count();
 }
 
 std::vector<int> values;
@@ -89,6 +90,24 @@ void break_test() {
     printf("predicted fails (not exact) %i\n", values.size() - 1000 * parallel::n_threads);
 }
 
+void async_test() {
+    reset();
+    start_timer();
+    auto job = parallel::_foreach_async<int>(values.data(), values.size(), [&](int v) {
+        if (v == 0)
+            std::this_thread::sleep_for(2s);
+        calculation(v);
+        return true;
+    });
+    auto stop = stop_timer("async test time -");
+
+    //one of the threads takes 2 seconds making almost impossible for job to finish before main thread reaches this point
+    if (stop >= 2000)
+        printf("async test failed - %lld", stop);
+
+    parallel::wait_jobs_finish(job);
+}
+
 int main() {
     parallel::init(pl::PARALLEL_CORES_ALL);
 
@@ -96,6 +115,7 @@ int main() {
 
     speed_test();
     break_test();
+    async_test();
 
     parallel::clean();
     values.clear();
