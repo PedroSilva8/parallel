@@ -1,6 +1,6 @@
 #include <chrono>
 #include <iostream>
-#include "parallel/parallel.hpp"
+#include "pl/parallel.hpp"
 
 using namespace pl;
 using namespace std::chrono;

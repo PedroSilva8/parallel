@@ -1,0 +1,1 @@
+target_sources(Parallel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/parallel.cpp ${CMAKE_CURRENT_SOURCE_DIR}/worker.cpp)

@@ -43,7 +43,7 @@ namespace pl {
         //check if it should force quit current job
         inline bool should_force_quit() const { return _force_quit; }
 
-        //check if all jobas have finished
+        //check if all jobs have finished
         bool has_finished();
     };
 

@@ -1,5 +1,5 @@
-#include "worker.hpp"
-#include "parallel.hpp"
+#include "pl/worker.hpp"
+#include "pl/parallel.hpp"
 
 using namespace pl;
 
@@ -33,6 +33,7 @@ parallel_worker::~parallel_worker() {
 void parallel_worker::worker() {
     std::mutex mtx;
     std::unique_lock<std::mutex> l(mtx);
+
     while (running) {
         cv.wait(l, [&]{ return !jobs.empty() || !running; });
 

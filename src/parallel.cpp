@@ -1,5 +1,7 @@
-#include "parallel.hpp"
+#include "pl/parallel.hpp"
+#include "pl/parallel.hpp"
 #include <chrono>
+
 using namespace pl;
 
 unsigned int parallel::n_threads = -1;
