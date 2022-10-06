@@ -99,6 +99,45 @@ namespace pl {
                 case PARALLEL_JOB_TYPE_UNDEFINED:
                     printf("parallel - error - attempted to execute a undefined job");
                     break;
+                case PARALLEL_JOB_TYPE_FOREACH:
+                    for (auto i = 0; i < size; i++) {
+                        if (finished || parent->should_force_quit())
+                            break;
+                        if (!callback(data[i + start]))
+                            parent->force_quit();
+                    }
+                    break;
+            }
+            finished = true;
+        }
+    };
+
+    template<> class parallel_job<int> : public parallel_job_base {
+    public:
+        ///pointer to data
+        int* data = nullptr;
+
+        ///job callback to process data
+        std::function<bool(int)> callback = nullptr;
+
+        /**
+         * @param _data pointer to data
+         * @param _start start index
+         * @param _size number of items to be processed
+         * @param _callback callback to process data
+         * @param _parent parent job to communicate with other threads and main thread
+         **/
+        parallel_job(int* _data, size_t _start, size_t _size, std::function<bool(int)>& _callback, parallel_job_parent* _parent = nullptr)
+                : parallel_job_base(_start, _size, _parent, _data == nullptr ? PARALLEL_JOB_TYPE_FOR : PARALLEL_JOB_TYPE_FOREACH) {
+            data = _data;
+            callback = _callback;
+        }
+
+        void process() override {
+            switch (type) {
+                case PARALLEL_JOB_TYPE_UNDEFINED:
+                    printf("parallel - error - attempted to execute a undefined job");
+                    break;
                 case PARALLEL_JOB_TYPE_FOR:
                     for (auto i = 0; i < size; i++) {
                         if (finished || parent->should_force_quit())

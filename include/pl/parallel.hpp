@@ -56,6 +56,11 @@ namespace pl {
         }
 
         template<typename T, typename Func> static  void nested_handler(size_t _start, size_t _size, T* _data, Func _callback) {
+            for (auto i = 0; i < _size; i++)
+                _callback(_data[_start + i]);
+        }
+
+        template<int, typename Func> static void nested_handler(size_t _start, size_t _size, int* _data, Func _callback) {
             if (_data == nullptr)
                 for (auto i = 0; i < _size; i++)
                     _callback(_start + i);
