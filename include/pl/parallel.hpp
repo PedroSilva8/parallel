@@ -55,12 +55,23 @@ namespace pl {
             return parent;
         }
 
+        template<typename T, typename Func> static  void nested_handler(size_t _start, size_t _size, T* _data, Func _callback) {
+            if (_data == nullptr)
+                for (auto i = 0; i < _size; i++)
+                    _callback(_start + i);
+            else
+                for (auto i = 0; i < _size; i++)
+                    _callback(_data[_start + i]);
+        }
+
     public:
         ///number of threads
         static unsigned int n_threads;
 
         ///array of pointers to workers
         static parallel_worker** threads;
+
+        static bool is_nested();
 
         /***
          * initialize parallel library
@@ -83,6 +94,8 @@ namespace pl {
          * @param _callback callback to process, return true to continue, return false to break
          */
         inline static void _for(size_t _start, size_t _size, const std::function<bool(int)>& _callback) {
+            if (is_nested())
+                return nested_handler<int>(_start, _size, nullptr, _callback);
             auto parent = create_job<int>(_start, _size, nullptr, _callback);
             wait_jobs_finish(parent);
             delete parent;
@@ -106,6 +119,8 @@ namespace pl {
          * @param _callback callback to process, return true to continue, return false to break
          */
         template<typename T> inline static void _foreach(T* _data, size_t _size, std::function<bool(T)> _callback) {
+            if (is_nested())
+                return nested_handler<T>(0, _size, _data, _callback);
             auto parent = create_job(0, _size, _data, _callback);
             wait_jobs_finish(parent);
             delete parent;

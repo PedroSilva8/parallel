@@ -4,7 +4,7 @@
 using namespace pl;
 
 bool parallel_job_parent::has_finished() {
-    return std::all_of(jobs.begin(), jobs.end(), [](parallel_job_base* j) { return j->finished; });
+    return std::all_of(jobs.begin(), jobs.end(), [](parallel_job_base* j) { return j->finished.load(); });
 }
 
 parallel_job_base::parallel_job_base(size_t _start, size_t _size, parallel_job_parent* _parent, parallel_job_type _type) {
@@ -16,13 +16,13 @@ parallel_job_base::parallel_job_base(size_t _start, size_t _size, parallel_job_p
 
 parallel_worker::parallel_worker() {
     running = true;
-    _thread = std::thread(&parallel_worker::worker, this);
+    m_thread = std::thread(&parallel_worker::worker, this);
 }
 
 parallel_worker::~parallel_worker() {
     running = false;
     cv.notify_all();
-    _thread.join();
+    m_thread.join();
 
     if (!jobs.empty())
         for (auto j : jobs)
@@ -45,5 +45,6 @@ void parallel_worker::worker() {
             jobs.erase(j);
         }
     }
+
     l.unlock();
 }

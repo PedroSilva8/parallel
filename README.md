@@ -9,7 +9,7 @@ __Pros__
 __Cons__
 
 - doesn't guarantee processing order (obviously)
-- when breaking doesn't guarantte that others threads do it instantly
+- when breaking doesn't guarantte that others m_main_workers do it instantly
 - no nesting (for now)
 - FIFO is currently the only method to process data
 

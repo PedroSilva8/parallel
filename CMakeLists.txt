@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.0.0)
 project(src VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(MALLOC_CHECK_ 2)
 
 include(GenerateExportHeader)
 
@@ -20,8 +18,12 @@ target_link_libraries(Parallel ${CMAKE_THREAD_LIBS_INIT})
 
 target_include_directories(Parallel PUBLIC include)
 
-include("GenerateExportHeader")
 generate_export_header(Parallel)
+
+target_compile_definitions(Parallel PRIVATE _CRT_SECURE_NO_WARNINGS GLFW_INCLUDE_NONE PUBLIC $<$<CONFIG:Debug>:OE_DEBUG> $<$<CONFIG:RelWithDebInfo>:OE_DEBUG> $<$<CONFIG:Release>:OE_RELEASE> $<$<CONFIG:MinSizeRel>:OE_RELEASE>)
+INSTALL (DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include FILES_MATCHING PATTERN "*.h*")
+install(TARGETS Parallel CONFIGURATIONS Debug RUNTIME DESTINATION Debug/bin)
+install(TARGETS Parallel CONFIGURATIONS Release RUNTIME DESTINATION Release/bin)
 
 add_subdirectory(src)
 

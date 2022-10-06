@@ -108,6 +108,32 @@ void async_test() {
     parallel::wait_jobs_finish(job);
 }
 
+void nestes_test() {
+    values.resize(5000);
+    reset();
+
+    parallel::_foreach<int>(values.data(), values.size(), [&](int v) {
+        parallel::_for(0, values.size(), [&](int i) {
+            values[v] += calculation(values[i]);
+            return true;
+        });
+        values[v] += calculation(v);
+        return true;
+    });
+
+    stop_timer("nested test time - ");
+
+    reset();
+
+    for(auto v : values) {
+        for (auto i = 0; i < values.size(); i++)
+            values[v] += calculation(values[i]);
+        values[v] += calculation(v);
+    }
+
+    stop_timer("nested normal test time - ");
+}
+
 int main() {
     parallel::init(pl::PARALLEL_CORES_ALL);
 
@@ -116,6 +142,7 @@ int main() {
     speed_test();
     break_test();
     async_test();
+    nestes_test();
 
     parallel::clean();
     values.clear();

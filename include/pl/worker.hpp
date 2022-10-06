@@ -22,9 +22,7 @@ namespace pl {
     ///class used to allow communication between main thread and workers and between workers
     class parallel_job_parent {
     private:
-        std::mutex mtx;
-        std::mutex _fq_mtx;
-        bool _force_quit = false;
+        std::atomic<bool> m_force_quit = false;
     public:
         //condition variable used to warn main thread that a thread has finished or others threads to quit
         std::condition_variable cv;
@@ -32,16 +30,13 @@ namespace pl {
 
         //tell threads to force quit current job
         inline void force_quit() {
-            if (_force_quit)
+            if (m_force_quit)
                 return;
-
-            _fq_mtx.lock();
-            _force_quit = true;
-            _fq_mtx.unlock();
+            m_force_quit = true;
         }
 
         //check if it should force quit current job
-        inline bool should_force_quit() const { return _force_quit; }
+        inline bool should_force_quit() const { return m_force_quit; }
 
         //check if all jobs have finished
         bool has_finished();
@@ -57,7 +52,7 @@ namespace pl {
         parallel_job_parent* parent;
 
         ///flag to warn the main thread that this thread has finished
-        bool finished = false;
+        std::atomic<bool> finished = false;
         ///start index
         size_t start = -1;
         ///number of items to go through
@@ -128,15 +123,20 @@ namespace pl {
     ///worker thread
     class parallel_worker {
     private:
-        std::thread _thread;
-    public:
+        std::thread m_thread;
+
         ///flag if thread is running or not
-        bool running = false;
+        std::atomic<bool> running = false;
+    public:
         ///conditional variable to warn thread that jobs were added or to quit
         std::condition_variable cv;
 
         ///thread safe vector that holds the jobs
         safe_vector<parallel_job_base*> jobs;
+
+        inline std::thread::id get_id() const { return m_thread.get_id(); }
+
+        inline void force_stop() { running = false; }
 
         parallel_worker();
         ~parallel_worker();

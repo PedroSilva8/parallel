@@ -1,46 +1,52 @@
-#ifndef __PARALLEL__SAFE__VECTOR__
-#define __PARALLEL__SAFE__VECTOR__
+#ifndef __SAFE__MAP__
+#define __SAFE__MAP__
 
+#include <map>
 #include <mutex>
-#include <vector>
+#include <algorithm>
 
 namespace pl {
 
-    ///wrapper vector to guarantee thread safety
-    template<typename T> struct safe_vector {
+    /***
+     * map wrapper to guarantee thread safety
+     * @tparam T key type
+     * @tparam C value type
+     */
+    template<typename T, typename C> struct safe_map {
     private:
         mutable std::mutex m_mtx;
-        std::vector<T> m_data;
+        std::map<T, C> m_data;
     public:
 
-        ~safe_vector() {
-            m_data.clear();
-            m_data.shrink_to_fit();
-        }
 
-        void push_back(T _value) {
+        void insert(T _key, C _value) {
             std::lock_guard<std::mutex> l(m_mtx);
-            m_data.push_back(_value);
+            m_data.insert(std::pair<T, C>(_key, _value));
         }
 
-        typename std::vector<T>::const_iterator begin() const {
+        bool has(T _key) {
+            std::lock_guard<std::mutex> l(m_mtx);
+            return m_data.find(_key) != m_data.end();
+        }
+
+        typename std::map<T, C>::const_iterator begin() const {
             std::lock_guard<std::mutex> l(m_mtx);
             return m_data.begin();
         }
 
-        typename std::vector<T>::const_iterator end() const {
+        typename std::map<T, C>::const_iterator end() const {
             std::lock_guard<std::mutex> l(m_mtx);
             return m_data.end();
         }
 
-        T at(size_t _index) const {
+        C &at(T _key) const {
             std::lock_guard<std::mutex> l(m_mtx);
-            return m_data[_index];
+            return m_data[_key];
         }
 
-        T operator[](size_t _index) const {
+        C &operator[](T _key) {
             std::lock_guard<std::mutex> l(m_mtx);
-            return m_data[_index];
+            return m_data[_key];
         }
 
         bool empty() {
@@ -50,7 +56,7 @@ namespace pl {
 
         void erase(T _value) {
             std::lock_guard<std::mutex> l(m_mtx);
-            m_data.erase(find(m_data.begin(), m_data.end(), _value));
+            m_data.erase(_value);
         }
 
         size_t size() const {
@@ -67,6 +73,5 @@ namespace pl {
             m_data.clear();
         }
     };
-};
-
+}
 #endif
