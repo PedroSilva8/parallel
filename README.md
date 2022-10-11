@@ -5,12 +5,12 @@ __Pros__
 
 - the more cores the computer has the faster it can process
 - easy to use and understand
+- nesting although it should be avoided
 
 __Cons__
 
 - doesn't guarantee processing order (obviously)
-- when breaking doesn't guarantte that others m_main_workers do it instantly
-- no nesting (for now)
+- when breaking doesn't guarantte that others workers do it instantly
 - FIFO is currently the only method to process data
 
 # example
