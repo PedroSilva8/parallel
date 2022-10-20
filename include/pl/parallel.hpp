@@ -50,6 +50,9 @@ namespace pl {
 
                 threads[i]->jobs.push_back(job);
                 threads[i]->cv.notify_one();
+
+                if (given >= _size)
+                    break;
             }
 
             return parent;
