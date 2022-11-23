@@ -21,9 +21,7 @@ namespace pl {
     private:
         safe_vector<pl_worker*> m_workers;
     public:
-        std::mutex mtx;
         safe_vector<pl_task_base*> tasks;
-        std::condition_variable cv;
 
         ~pl_job();
 
