@@ -62,7 +62,7 @@ namespace pl {
     * @param _callback callback to execute each instance
     * @param _cores core type
     */
-    void _for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+    inline void _for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
         size_t i = 0;
         auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
         new_job->start();
@@ -79,7 +79,7 @@ namespace pl {
     * @param _callback callback to execute each instance
     * @param _cores core type
     */
-    template<typename T> void _foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+    template<typename T> inline void _foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
         auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
         new_job->start();
         new_job->wait();
@@ -94,7 +94,7 @@ namespace pl {
      * @param _cores core type
      * @return returns pointer to job don't forget to delete it
      */
-    pl_job* async_for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+    inline pl_job* async_for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
         size_t i = 0;
         auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
         new_job->start();
@@ -110,7 +110,7 @@ namespace pl {
      * @param _cores core type
      * @return returns pointer to job don't forget to delete it
      */
-    template<typename T> pl_job* async_foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+    template<typename T> inline pl_job* async_foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
         auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
         new_job->start();
         return new_job;
