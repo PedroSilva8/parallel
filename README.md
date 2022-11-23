@@ -1,17 +1,15 @@
 # parallel
-parallel is a lightweight library that simplifies the job of multithreading the processing of arrays by doing most of the heavy lifting and giving up to ~78% faster processing time then using a normal for loop
+parallel is a lightweight library that simplifies the job of multithreading the processing of arrays by doing most of the heavy lifting and giving up to 4x faster processing time then using a normal for loop
 
 __Pros__
 
 - the more cores the computer has the faster it can process
 - easy to use and understand
-- nesting although it should be avoided
 
 __Cons__
 
 - doesn't guarantee processing order (obviously)
-- when breaking doesn't guarantte that others workers do it instantly
-- FIFO is currently the only method to process data
+- when breaking doesn't guarantee that others workers do it instantly
 
 # example
 for a full example you can go [here](test/test.cpp)
@@ -24,7 +22,7 @@ normal for loop
 
 parallel for loop
 ```c++
-    parallel::_for(0, values.size(), [&](int i) {
+    pl::_for(0, values.size(), [&](int i) {
         values[i] = calculation(i);
         return true;
     });
@@ -38,8 +36,8 @@ normal "foreach" loop
  
  parallel "foreach" loop
  ```c++
-    parallel::_foreach<int>(values.data(), values.size(), [&](int v) {
-        auto value = calculation(v);
+    pl::_foreach<int>(values.data(), values.size(), [&](int v) {
+        values[v] = calculation(v);
         return true;
     });
 ```

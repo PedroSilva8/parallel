@@ -2,7 +2,6 @@
 #include <iostream>
 #include "pl/parallel.hpp"
 
-using namespace pl;
 using namespace std::chrono;
 
 auto start = high_resolution_clock::now();
@@ -19,7 +18,7 @@ inline long long stop_timer(const char* prefix) {
 std::vector<int> values;
 
 void reset() {
-    parallel::_for(0, values.size(), [&](int i) {
+    pl::_for(0, values.size(), [&](int i) {
         values[i] = i;
         return true;
     });
@@ -33,7 +32,7 @@ void speed_test() {
     ///Test parallel for
     start_timer();
 
-    parallel::_for(0, values.size(), [&](int i) {
+    pl::_for(0, values.size(), [&](int i) {
         values[i] = calculation(i);
         return true;
     });
@@ -52,7 +51,7 @@ void speed_test() {
     ///Test parallel for
     start_timer();
 
-    parallel::_foreach<int>(values.data(), values.size(), [&](int v) {
+    pl::_foreach<int>(values.data(), values.size(), [&](int v) {
         values[v] = calculation(v);
         return true;
     });
@@ -73,7 +72,7 @@ void speed_test() {
 void break_test() {
     reset();
 
-    parallel::_foreach<int>(values.data(), values.size(), [&](int v) {
+    pl::_foreach<int>(values.data(), values.size(), [&](int v) {
         if (v != 1000)
             values[v] = 0;
 
@@ -87,13 +86,13 @@ void break_test() {
             total_fails++;
 
     printf("total fails %i\n", total_fails);
-    printf("predicted fails (not exact) %i\n", values.size() - 1000 * parallel::n_threads);
+    printf("predicted fails (not exact) %i\n", values.size() - 1000 * std::thread::hardware_concurrency());
 }
 
 void async_test() {
     reset();
     start_timer();
-    auto job = parallel::_foreach_async<int>(values.data(), values.size(), [&](int v) {
+    auto job = pl::async_foreach<int>(values.data(), values.size(), [&](int v) {
         if (v == 0)
             std::this_thread::sleep_for(2s);
         calculation(v);
@@ -105,46 +104,34 @@ void async_test() {
     if (stop >= 2000)
         printf("async test failed - %lld", stop);
 
-    parallel::wait_jobs_finish(job);
+    job->wait();
+    job->clean();
+    delete job;
 }
 
-void nestes_test() {
-    values.resize(5000);
+//in the old version when creating multiple small jobs there was a chance of the main thread getting stuck waiting
+void quick_test() {
     reset();
-
-    parallel::_foreach<int>(values.data(), values.size(), [&](int v) {
-        parallel::_for(0, values.size(), [&](int i) {
-            values[v] += calculation(values[i]);
+    start_timer();
+    for (auto i = 0; i < 1000; i++) {
+        pl::_for(0, 12, [&](size_t& v) {
+            values[v] = calculation(v);
             return true;
         });
-        values[v] += calculation(v);
-        return true;
-    });
-
-    stop_timer("nested test time - ");
+    }
+    stop_timer("quick test - ");
 
     reset();
-
-    for(auto v : values) {
-        for (auto i = 0; i < values.size(); i++)
-            values[v] += calculation(values[i]);
-        values[v] += calculation(v);
-    }
-
-    stop_timer("nested normal test time - ");
 }
 
 int main() {
-    parallel::init(pl::PARALLEL_CORES_ALL);
-
     values.resize(50000000);
 
     speed_test();
     break_test();
     async_test();
-    nestes_test();
+    quick_test();
 
-    parallel::clean();
     values.clear();
     return 0;
 }

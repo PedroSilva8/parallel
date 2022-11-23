@@ -1,5 +1,5 @@
-#ifndef __SAFE__MAP__
-#define __SAFE__MAP__
+#ifndef PL_SAFE_MAP_
+#define PL_SAFE_MAP_
 
 #include <map>
 #include <mutex>

@@ -1,189 +1,37 @@
-#ifndef __PARALLEL__WORKER__
-#define __PARALLEL__WORKER__
+#ifndef PL_WORKER_
+#define PL_WORKER_
 
-#include <vector>
 #include <thread>
-#include <mutex>
-#include <condition_variable>
-#include "safe_vector.hpp"
-#include <functional>
+#include "task.hpp"
 
 namespace pl {
-
-    ///type of jobs, if a job has PARALLEL_JOB_TYPE_UNDEFINED type it's because something failed during it's creation or its an invalid job
-    enum parallel_job_type {
-        PARALLEL_JOB_TYPE_UNDEFINED,
-        PARALLEL_JOB_TYPE_FOR,
-        PARALLEL_JOB_TYPE_FOREACH
-    };
-
-    class parallel_job_base;
-
-    ///class used to allow communication between main thread and workers and between workers
-    class parallel_job_parent {
+    class pl_worker {
     private:
-        std::atomic<bool> m_force_quit = false;
+        std::thread m_thread{};
+        pl_task_base* m_task = nullptr;
+        std::atomic<bool> m_finished = false;
+        pl_job* m_parent = nullptr;
     public:
-        //condition variable used to warn main thread that a thread has finished or others threads to quit
-        std::condition_variable cv;
-        std::vector<parallel_job_base*> jobs;
+        inline bool finished() { return m_finished; }
 
-        //tell threads to force quit current job
-        inline void force_quit() {
-            if (m_force_quit)
-                return;
-            m_force_quit = true;
+        explicit pl_worker(pl_job* _parent, pl_task_base* _task) {
+            m_task = _task;
+            m_finished = false;
+            m_parent = _parent;
+            m_thread = std::thread(&pl_worker::work, this);
         }
 
-        //check if it should force quit current job
-        inline bool should_force_quit() const { return m_force_quit; }
-
-        //check if all jobs have finished
-        bool has_finished();
-    };
-
-    ///base class for parallel jobs, contains all necessary information and functions
-    class parallel_job_base {
-    public:
-        ///type of job
-        parallel_job_type type = PARALLEL_JOB_TYPE_UNDEFINED;
-
-        ///parent to allow communication with main thread and other threads
-        parallel_job_parent* parent;
-
-        ///flag to warn the main thread that this thread has finished
-        std::atomic<bool> finished = false;
-        ///start index
-        size_t start = -1;
-        ///number of items to go through
-        size_t size = -1;
-
-
-        /**
-         * parallel job base constructor
-         * @param _start start index
-         * @param _size number of items to go through
-         * @param _parent parent job to communicate with main thread and other threads
-         * @param _type type of job
-         */
-        parallel_job_base(size_t _start, size_t _size, parallel_job_parent* _parent, parallel_job_type _type);
-
-        ///virtual function to start processing
-        inline virtual void process() { finished = true; }
-    };
-
-    ///main job class where t is the type of object being processed
-    template<typename T> class parallel_job : public parallel_job_base {
-    public:
-        ///pointer to data
-        T* data = nullptr;
-
-        ///job callback to process data
-        std::function<bool(T)> callback = nullptr;
-
-        /**
-         * @param _data pointer to data
-         * @param _start start index
-         * @param _size number of items to be processed
-         * @param _callback callback to process data
-         * @param _parent parent job to communicate with other threads and main thread
-         **/
-        parallel_job(T* _data, size_t _start, size_t _size, std::function<bool(T)>& _callback, parallel_job_parent* _parent = nullptr)
-                : parallel_job_base(_start, _size, _parent, _data == nullptr ? PARALLEL_JOB_TYPE_FOR : PARALLEL_JOB_TYPE_FOREACH) {
-            data = _data;
-            callback = _callback;
+        ~pl_worker() {
+            m_thread.join();
         }
 
-        void process() override {
-            switch (type) {
-                case PARALLEL_JOB_TYPE_UNDEFINED:
-                    printf("parallel - error - attempted to execute a undefined job");
-                    break;
-                case PARALLEL_JOB_TYPE_FOREACH:
-                    for (auto i = 0; i < size; i++) {
-                        if (finished || parent->should_force_quit())
-                            break;
-                        if (!callback(data[i + start]))
-                            parent->force_quit();
-                    }
-                    break;
-            }
-            finished = true;
+        inline void work() {
+            m_task->process();
+            m_finished = true;
+            std::unique_lock lk(m_parent->mtx);
+            std::notify_all_at_thread_exit(m_parent->cv, std::move(lk));
         }
-    };
-
-    template<> class parallel_job<int> : public parallel_job_base {
-    public:
-        ///pointer to data
-        int* data = nullptr;
-
-        ///job callback to process data
-        std::function<bool(int)> callback = nullptr;
-
-        /**
-         * @param _data pointer to data
-         * @param _start start index
-         * @param _size number of items to be processed
-         * @param _callback callback to process data
-         * @param _parent parent job to communicate with other threads and main thread
-         **/
-        parallel_job(int* _data, size_t _start, size_t _size, std::function<bool(int)>& _callback, parallel_job_parent* _parent = nullptr)
-                : parallel_job_base(_start, _size, _parent, _data == nullptr ? PARALLEL_JOB_TYPE_FOR : PARALLEL_JOB_TYPE_FOREACH) {
-            data = _data;
-            callback = _callback;
-        }
-
-        void process() override {
-            switch (type) {
-                case PARALLEL_JOB_TYPE_UNDEFINED:
-                    printf("parallel - error - attempted to execute a undefined job");
-                    break;
-                case PARALLEL_JOB_TYPE_FOR:
-                    for (auto i = 0; i < size; i++) {
-                        if (finished || parent->should_force_quit())
-                            break;
-                        if (!callback(i + start))
-                            parent->force_quit();
-                    }
-                    break;
-                case PARALLEL_JOB_TYPE_FOREACH:
-                    for (auto i = 0; i < size; i++) {
-                        if (finished || parent->should_force_quit())
-                            break;
-                        if (!callback(data[i + start]))
-                            parent->force_quit();
-                    }
-                    break;
-            }
-            finished = true;
-        }
-    };
-
-    ///worker thread
-    class parallel_worker {
-    private:
-        std::thread m_thread;
-
-        ///flag if thread is running or not
-        std::atomic<bool> running = false;
-    public:
-        ///conditional variable to warn thread that jobs were added or to quit
-        std::condition_variable cv;
-
-        ///thread safe vector that holds the jobs
-        safe_vector<parallel_job_base*> jobs;
-
-        inline std::thread::id get_id() const { return m_thread.get_id(); }
-
-        inline void force_stop() { running = false; }
-
-        parallel_worker();
-        ~parallel_worker();
-
-        //worker function
-        void worker();
     };
 }
-
 
 #endif

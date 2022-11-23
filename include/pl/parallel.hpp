@@ -1,154 +1,120 @@
-#ifndef __PARALLEL__
-#define __PARALLEL__
+#ifndef PL_PARALLEL_
+#define PL_PARALLEL_
 
 #include <functional>
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <condition_variable>
 #include <cmath>
-
 #include "worker.hpp"
 
 namespace pl {
-
-    ///type of parallel n_threads
-    enum parallel_cores {
-        PARALLEL_CORES_ALL,
-        PARALLEL_CORES_ALL_MINUS_ONE,
-        PARALLEL_CORES_HALF,
-        PARALLEL_CORES_QUARTER,
-        PARALLEL_CORES_CUSTOM
+    enum pl_cores {
+        PL_CORES_ALL,
+        PL_CORES_ALL_MINUS_ONE,
+        PL_CORES_HALF,
+        PL_CORES_QUARTER,
+        PL_CORES_SINGLE,
     };
 
-    class parallel {
-    private:
-        /***
-         *  @param _start start index
-         *  @param _size number of items to process
-         *  @param _data pointer to data
-         *  @param _callback callback function to process items
-         **/
-        template<typename T, typename Func> static parallel_job_parent* create_job(size_t _start, size_t _size, T* _data, Func _callback) {
-            if (n_threads == -1) {
-                printf("parallel - error - attempted to create a job without calling init");
-                return nullptr;
-            }
+    template<typename T> pl_job* create_job(pl_job_task _task_type, size_t _start, size_t _size, T* _data, const std::function<bool(T&)>& _callback, pl_cores _cores) {
+        auto new_job = new pl_job();
+        size_t physical_cores = std::thread::hardware_concurrency();
 
-            int job_per_core = std::ceil((float)_size / (float)n_threads);
+        size_t actual_cores;
 
-            auto parent = new parallel_job_parent();
-
-            int given = 0;
-
-            for (auto i = 0; i < n_threads; i++) {
-
-                auto job = new parallel_job<T>(_data, given + _start, job_per_core + given > _size ? _size - given : job_per_core, _callback, parent);
-                given += job_per_core;
-
-                parent->jobs.push_back(job);
-
-                threads[i]->jobs.push_back(job);
-                threads[i]->cv.notify_one();
-
-                if (given >= _size)
-                    break;
-            }
-
-            return parent;
+        switch (_cores) {
+            case PL_CORES_ALL_MINUS_ONE:
+                actual_cores -= 1;
+                break;
+            case PL_CORES_HALF:
+                actual_cores = std::min(physical_cores / 2, (size_t)1);
+                break;
+            case PL_CORES_QUARTER:
+                actual_cores = std::min(physical_cores / 4, (size_t)1);
+                break;
+            case PL_CORES_SINGLE:
+                actual_cores = 1;
+                break;
+            case PL_CORES_ALL:
+                actual_cores = physical_cores;
+                break;
         }
 
-        template<typename T, typename Func> static  void nested_handler(size_t _start, size_t _size, T* _data, Func _callback) {
-            for (auto i = 0; i < _size; i++)
-                _callback(_data[_start + i]);
+        size_t tasks_per_core = std::ceil((long double)_size / (long double)actual_cores);
+
+        size_t tasks_given = 0;
+
+        for (auto i = 0; i < actual_cores; i++) {
+            auto task = new pl_task<T>(new_job, _task_type, tasks_given + _start, tasks_per_core + tasks_given > _size ? _size - tasks_given : tasks_per_core, _data, _callback);
+            tasks_given += tasks_per_core;
+
+            new_job->tasks.push_back(task);
+
+            if (tasks_given >= _size)
+                break;
         }
 
-        template<int, typename Func> static void nested_handler(size_t _start, size_t _size, int* _data, Func _callback) {
-            if (_data == nullptr)
-                for (auto i = 0; i < _size; i++)
-                    _callback(_start + i);
-            else
-                for (auto i = 0; i < _size; i++)
-                    _callback(_data[_start + i]);
-        }
+        return  new_job;
+    }
 
-    public:
-        ///number of threads
-        static unsigned int n_threads;
+    /**
+    * Create a for job, blocks executing thread while waiting
+    * @param _start where to start
+    * @param _length length of array
+    * @param _callback callback to execute each instance
+    * @param _cores core type
+    */
+    void _for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+        size_t i = 0;
+        auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
+        new_job->start();
+        new_job->wait();
+        new_job->clean();
+        delete new_job;
+    }
 
-        ///array of pointers to workers
-        static parallel_worker** threads;
+    /**
+    * Create a foreach job, blocks executing thread while waiting
+    * @tparam T Data type
+    * @param _data pointer to data
+    * @param _length length of array
+    * @param _callback callback to execute each instance
+    * @param _cores core type
+    */
+    template<typename T> void _foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+        auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
+        new_job->start();
+        new_job->wait();
+        new_job->clean();
+    }
 
-        static bool is_nested();
+    /**
+     * Create a async for job, useful when repeating tasks
+     * @param _start where to start
+     * @param _length length of array
+     * @param _callback callback to execute each instance
+     * @param _cores core type
+     * @return returns pointer to job don't forget to delete it
+     */
+    pl_job* async_for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+        size_t i = 0;
+        auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
+        new_job->start();
+        return new_job;
+    }
 
-        /***
-         * initialize parallel library
-         * @param _cores method to choose number of cores
-         * @param _n_cores number of cores to use, ignored if _cores is not custom
-         */
-        static void init(parallel_cores _cores, unsigned int _n_cores = -1);
-
-        /***
-         * sleeps thread until job finishes
-         * @param _parent job parent
-         * @param timeout timeout function to avoid locking infinitely, default 20
-         */
-        static void wait_jobs_finish(parallel_job_parent* _parent, int timeout = 20);
-
-        /***
-         * threaded for
-         * @param _start starting index
-         * @param _size number of items to process
-         * @param _callback callback to process, return true to continue, return false to break
-         */
-        inline static void _for(size_t _start, size_t _size, const std::function<bool(int)>& _callback) {
-            if (is_nested())
-                return nested_handler<int>(_start, _size, nullptr, _callback);
-            auto parent = create_job<int>(_start, _size, nullptr, _callback);
-            wait_jobs_finish(parent);
-            delete parent;
-        }
-
-        /***
-        * async threaded for
-        * @param _start starting index
-        * @param _size number of items to process
-        * @param _callback callback to process, return true to continue, return false to break
-        */
-        inline static parallel_job_parent* _for_async(size_t _start, size_t _size, const std::function<bool(int)>& _callback) {
-            return create_job<int>(_start, _size, nullptr, _callback);
-        }
-
-        /***
-         * threaded for (auto value : array)
-         * @tparam T type of data being processed
-         * @param _data pointer to data
-         * @param _size number of items to process
-         * @param _callback callback to process, return true to continue, return false to break
-         */
-        template<typename T> inline static void _foreach(T* _data, size_t _size, std::function<bool(T)> _callback) {
-            if (is_nested())
-                return nested_handler<T>(0, _size, _data, _callback);
-            auto parent = create_job(0, _size, _data, _callback);
-            wait_jobs_finish(parent);
-            delete parent;
-        }
-
-        /***
-        * async threaded for (auto value : array)
-        * @tparam T type of data being processed
-        * @param _data pointer to data
-        * @param _size number of items to process
-        * @param _callback callback to process, return true to continue, return false to break
-        */
-        template<typename T> inline static parallel_job_parent* _foreach_async(T* _data, size_t _size, std::function<bool(T)> _callback) {
-            return create_job(0, _size, _data, _callback);
-        }
-
-        ///clean up library
-        static void clean();
-    };
+    /**
+     * Create a async foreach job, useful when repeating tasks
+     * @tparam T Data type
+     * @param _data pointer to data
+     * @param _length length of array
+     * @param _callback callback to execute each instance
+     * @param _cores core type
+     * @return returns pointer to job don't forget to delete it
+     */
+    template<typename T> pl_job* async_foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
+        auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
+        new_job->start();
+        return new_job;
+    }
 }
-
 
 #endif

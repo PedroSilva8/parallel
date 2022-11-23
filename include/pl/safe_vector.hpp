@@ -1,5 +1,5 @@
-#ifndef __PARALLEL__SAFE__VECTOR__
-#define __PARALLEL__SAFE__VECTOR__
+#ifndef PL_SAFE_VECTOR_
+#define PL_SAFE_VECTOR_
 
 #include <mutex>
 #include <vector>
@@ -67,6 +67,6 @@ namespace pl {
             m_data.clear();
         }
     };
-};
+}
 
 #endif
