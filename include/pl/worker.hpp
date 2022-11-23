@@ -11,25 +11,51 @@ namespace pl {
         pl_task_base* m_task = nullptr;
         std::atomic<bool> m_finished = false;
         pl_job* m_parent = nullptr;
+        std::atomic<bool> m_running;
     public:
+        std::mutex mtx;
+        std::condition_variable cv;
+
         inline bool finished() { return m_finished; }
+        inline void restart() { m_finished = false; }
 
         explicit pl_worker(pl_job* _parent, pl_task_base* _task) {
             m_task = _task;
             m_finished = false;
+            m_running = true;
             m_parent = _parent;
             m_thread = std::thread(&pl_worker::work, this);
         }
 
         ~pl_worker() {
+            std::unique_lock child_lk(mtx);
+            m_running = false;
+            child_lk.unlock();
+
+            cv.notify_all();
             m_thread.join();
         }
 
         inline void work() {
-            m_task->process();
-            m_finished = true;
-            std::unique_lock lk(m_parent->mtx);
-            std::notify_all_at_thread_exit(m_parent->cv, std::move(lk));
+            while (m_running) {
+                {
+                    std::unique_lock child_lk(mtx);
+                    cv.wait(child_lk, [&] { return !m_finished || !m_running; });
+                }
+
+                if (!m_running)
+                    return;
+
+                m_finished = false;
+                m_task->process();
+
+                {
+                    std::unique_lock child_lk(mtx);
+                    m_finished = true;
+                }
+
+                cv.notify_all();
+            }
         }
     };
 }

@@ -29,6 +29,7 @@ namespace pl {
 
         void force_quit();
 
+        void load();
         void start();
         void wait();
         void clean();

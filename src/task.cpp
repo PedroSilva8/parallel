@@ -13,19 +13,26 @@ void pl_job::force_quit() {
         task->stop();
 }
 
-void pl_job::start() {
+void pl_job::load() {
     for (auto& task : tasks)
         m_workers.push_back(new pl_worker(this, task));
 }
 
-void pl_job::wait() {
-    std::unique_lock lk(mtx);
+void pl_job::start() {
+    for (auto& worker : m_workers) {
+        {
+            std::unique_lock lk(worker->mtx);
+            worker->restart();
+        }
+        worker->cv.notify_all();
+    }
+}
 
-    cv.wait(lk, [&] {
-        return std::all_of(m_workers.begin(), m_workers.end(), [](pl_worker* worker){
-            return worker->finished();
-        });
-    });
+void pl_job::wait() {
+    for (auto& worker : m_workers) {
+        std::unique_lock lk(worker->mtx);
+        worker->cv.wait(lk, [&]{ return worker->finished(); });
+    }
 }
 
 void pl_job::clean() {
