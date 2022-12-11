@@ -13,6 +13,12 @@ namespace pl {
         std::vector<T> m_data;
     public:
 
+        safe_vector() = default;
+
+        safe_vector(const safe_vector& _vec) {
+            m_data = _vec.m_data;
+        }
+
         ~safe_vector() {
             m_data.clear();
             m_data.shrink_to_fit();
@@ -53,6 +59,11 @@ namespace pl {
             m_data.erase(find(m_data.begin(), m_data.end(), _value));
         }
 
+        void resize(size_t _new_size) {
+            std::lock_guard<std::mutex> l(m_mtx);
+            m_data.resize(_new_size);
+        }
+
         size_t size() const {
             return m_data.size();
         }
@@ -65,6 +76,11 @@ namespace pl {
         void clear() {
             std::lock_guard<std::mutex> l(m_mtx);
             m_data.clear();
+        }
+
+        safe_vector& operator=(const safe_vector& other) {
+            m_data = other.m_data;
+            return *this;
         }
     };
 }

@@ -2,9 +2,12 @@
 #define PL_WORKER_
 
 #include <thread>
-#include "task.hpp"
+#include <condition_variable>
 
 namespace pl {
+    class pl_task_base;
+    class pl_job;
+
     class pl_worker {
     private:
         std::thread m_thread{};
@@ -36,27 +39,7 @@ namespace pl {
             m_thread.join();
         }
 
-        inline void work() {
-            while (m_running) {
-                {
-                    std::unique_lock child_lk(mtx);
-                    cv.wait(child_lk, [&] { return !m_finished || !m_running; });
-                }
-
-                if (!m_running)
-                    return;
-
-                m_finished = false;
-                m_task->process();
-
-                {
-                    std::unique_lock child_lk(mtx);
-                    m_finished = true;
-                }
-
-                cv.notify_all();
-            }
-        }
+        void work();
     };
 }
 

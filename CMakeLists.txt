@@ -3,7 +3,7 @@ project(parallel)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_library(parallel SHARED src/task.cpp)
+add_library(parallel SHARED src/task.cpp src/worker.cpp)
 target_include_directories(parallel PUBLIC include)
 
 add_executable(parallel_test test/test.cpp)

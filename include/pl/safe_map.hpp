@@ -72,6 +72,11 @@ namespace pl {
             std::lock_guard<std::mutex> l(m_mtx);
             m_data.clear();
         }
+
+        safe_map& operator=(const safe_map& other) {
+            m_data = other.m_data;
+            return *this;
+        }
     };
 }
 #endif

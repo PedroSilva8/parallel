@@ -2,6 +2,7 @@
 #define PL_TASK_
 
 #include "safe_vector.hpp"
+#include "worker.hpp"
 #include <atomic>
 #include <functional>
 #include <condition_variable>
@@ -23,14 +24,39 @@ namespace pl {
     public:
         safe_vector<pl_task_base*> tasks;
 
-        ~pl_job();
+        ~pl_job() {
+            for (auto& task : tasks)
+                delete task;
+        }
 
         void force_quit();
 
-        void load();
-        void start();
-        void wait();
-        void clean();
+        inline void load() {
+            for (auto& task : tasks)
+                m_workers.push_back(new pl_worker(this, task));
+        }
+
+        inline void start() {
+            for (auto& worker : m_workers) {
+                {
+                    std::unique_lock lk(worker->mtx);
+                    worker->restart();
+                }
+                worker->cv.notify_all();
+            }
+        }
+
+        inline void wait() {
+            for (auto& worker : m_workers) {
+                std::unique_lock lk(worker->mtx);
+                worker->cv.wait(lk, [&]{ return worker->finished(); });
+            }
+        }
+
+        inline void clean() {
+            for (auto& worker : m_workers)
+                delete worker;
+        }
     };
 
     class pl_task_base {

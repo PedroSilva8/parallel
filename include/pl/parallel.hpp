@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <cmath>
+#include "task.hpp"
 #include "worker.hpp"
 
 namespace pl {
