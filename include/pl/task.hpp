@@ -46,6 +46,13 @@ namespace pl {
             }
         }
 
+        inline bool has_finished() {
+            for (auto& worker : m_workers)
+                if (!worker->finished())
+                    return false;
+            return true;
+        }
+
         inline void wait() {
             for (auto& worker : m_workers) {
                 std::unique_lock lk(worker->mtx);
