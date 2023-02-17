@@ -24,10 +24,7 @@ namespace pl {
     public:
         safe_vector<pl_task_base*> tasks;
 
-        ~pl_job() {
-            for (auto& task : tasks)
-                delete task;
-        }
+        ~pl_job();
 
         void force_quit();
 
@@ -37,13 +34,8 @@ namespace pl {
         }
 
         inline void start() {
-            for (auto& worker : m_workers) {
-                {
-                    std::unique_lock lk(worker->mtx);
-                    worker->restart();
-                }
-                worker->cv.notify_all();
-            }
+            for (auto& worker : m_workers)
+                worker->restart();
         }
 
         inline bool has_finished() {
@@ -54,10 +46,8 @@ namespace pl {
         }
 
         inline void wait() {
-            for (auto& worker : m_workers) {
-                std::unique_lock lk(worker->mtx);
-                worker->cv.wait(lk, [&]{ return worker->finished(); });
-            }
+            for (auto& worker : m_workers)
+                worker->wait(false);
         }
 
         inline void clean() {
