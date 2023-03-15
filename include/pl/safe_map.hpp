@@ -19,6 +19,13 @@ namespace pl {
     public:
         safe_map() : m_mtx(std::make_unique<std::mutex>()) { };
 
+        inline bool safe_contains(const T& key) {
+            lock();
+            auto result = this->contains(key);
+            unlock();
+            return result;
+        }
+
         inline void lock() {
             m_mtx->lock();
         }

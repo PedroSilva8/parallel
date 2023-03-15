@@ -1,126 +1,183 @@
 #ifndef PL_PARALLEL_
 #define PL_PARALLEL_
 
+#include <memory>
+#include <thread>
+#include <deque>
 #include <functional>
-#include <cmath>
-#include "task.hpp"
-#include "worker.hpp"
+#include <condition_variable>
+#include <latch>
 
 namespace pl {
-    enum pl_cores {
-        PL_CORES_ALL,
-        PL_CORES_ALL_MINUS_ONE,
-        PL_CORES_HALF,
-        PL_CORES_QUARTER,
-        PL_CORES_SINGLE,
+
+    enum PL_TASK_WORK_TYPE {
+        PL_TASK_WORK_TYPE_FOR,
+        PL_TASK_WORK_TYPE_FOREACH
     };
 
-    template<typename T> pl_job* create_job(pl_job_task _task_type, size_t _start, size_t _size, T* _data, const std::function<bool(T&)>& _callback, pl_cores _cores) {
-        auto new_job = new pl_job();
-        size_t physical_cores = std::thread::hardware_concurrency();
+    struct pl_task_data {
+        std::condition_variable m_cv;
+        std::atomic<bool> running = true;
+        std::atomic<bool> complete = true;
+        std::mutex mtx;
 
-        size_t actual_cores;
+        std::atomic<size_t> index = 0;
+        std::atomic<size_t> size = 0;
+        std::deque<std::jthread> workers;
+        std::unique_ptr<std::latch> latch;
 
-        switch (_cores) {
-            case PL_CORES_ALL_MINUS_ONE:
-                actual_cores -= 1;
-                break;
-            case PL_CORES_HALF:
-                actual_cores = std::min(physical_cores / 2, (size_t)1);
-                break;
-            case PL_CORES_QUARTER:
-                actual_cores = std::min(physical_cores / 4, (size_t)1);
-                break;
-            case PL_CORES_SINGLE:
-                actual_cores = 1;
-                break;
-            case PL_CORES_ALL:
-                actual_cores = physical_cores;
-                break;
+        ~pl_task_data() {
+            running = false;
+            m_cv.notify_all();
+            for (size_t i = 0; i < workers.size(); i++) {
+                workers.front().join();
+                workers.pop_front();
+            }
+        }
+    };
+
+    template<typename T> class pl_task {
+    private:
+        std::shared_ptr<pl_task_data> m_task_data;
+        std::atomic<T*> m_data;
+        size_t m_start;
+        PL_TASK_WORK_TYPE m_work_type;
+
+        std::function<bool(T&)> m_callback;
+
+        template<typename T2> void process() {
+            size_t i = m_task_data->index++;
+
+            while (i < m_task_data->size) {
+                if (!m_callback(m_data[i]))
+                    m_task_data->index.exchange(m_task_data->size);
+                i = m_task_data->index++;
+            }
         }
 
-        size_t tasks_per_core = std::ceil((long double)_size / (long double)actual_cores);
+        void work() {
+            while (m_task_data->running) {
+                while (m_task_data->complete && m_task_data->running) {
+                    std::unique_lock<std::mutex> lock(m_task_data->mtx);
+                    m_task_data->m_cv.wait(lock, [&] { return !m_task_data->complete || !m_task_data->running.load(); });
+                }
 
-        size_t tasks_given = 0;
+                if (!m_task_data->running)
+                    return;
 
-        for (auto i = 0; i < actual_cores; i++) {
-            auto task = new pl_task<T>(new_job, _task_type, tasks_given + _start, tasks_per_core + tasks_given > _size ? _size - tasks_given : tasks_per_core, _data, _callback);
-            tasks_given += tasks_per_core;
+                process<T>();
 
-            new_job->tasks.push_back(task);
-
-            if (tasks_given >= _size)
-                break;
+                m_task_data->latch->arrive_and_wait();
+                m_task_data->complete.exchange(true);
+                m_task_data->m_cv.notify_all();
+            }
         }
 
-        return  new_job;
+    public:
+        pl_task(size_t _cores, const std::function<bool(T&)>& _callback, T* _data, size_t _size) : m_task_data(new pl_task_data()), m_work_type(PL_TASK_WORK_TYPE_FOREACH) {
+            m_data = _data;
+            m_callback = _callback;
+            m_task_data->size.exchange(_size);
+            for (size_t i = 0; i < _cores; i++)
+                m_task_data->workers.push_back(std::jthread(&pl_task::work, this));
+            m_task_data->latch = std::make_unique<std::latch>(_cores);
+        }
+
+        pl_task(size_t _cores, const std::function<bool(T&)>& _callback, size_t _start, size_t _size) : m_task_data(new pl_task_data()), m_work_type(PL_TASK_WORK_TYPE_FOR) {
+            m_start = _start;
+            m_callback = _callback;
+            m_task_data->size.exchange(_size);
+            for (size_t i = 0; i < _cores; i++)
+                m_task_data->workers.push_back(std::jthread(&pl_task::work, this));
+            m_task_data->latch = std::make_unique<std::latch>(_cores);
+        }
+
+        pl_task(const pl_task& _copy) {
+            m_data = _copy.m_data.load();
+            m_callback = _copy.m_callback;
+            m_task_data = _copy.m_task_data;
+            m_work_type = _copy.m_work_type;
+            m_start = _copy.m_start;
+        }
+
+        pl_task& operator=(const pl_task& _copy) {
+            if (this == &_copy)
+                return *this;
+
+            m_data = _copy.m_data.load();
+            m_callback = _copy.m_callback;
+            m_task_data = _copy.m_task_data;
+            m_work_type = _copy.m_work_type;
+            m_start = _copy.m_start;
+            return *this;
+        }
+
+        inline pl_task& start() {
+            switch (m_work_type) {
+                case PL_TASK_WORK_TYPE_FOR:
+                    m_task_data->index.exchange(m_start);
+                    break;
+                case PL_TASK_WORK_TYPE_FOREACH:
+                    m_task_data->index.exchange(0);
+                    break;
+            }
+
+            m_task_data->latch = std::make_unique<std::latch>(m_task_data->workers.size());
+            m_task_data->complete.exchange(false);
+            m_task_data->m_cv.notify_all();
+            return *this;
+        }
+
+        inline pl_task& wait() {
+            while (!m_task_data->complete.load()) {
+                std::unique_lock<std::mutex> lock(m_task_data->mtx);
+                m_task_data->m_cv.wait(lock, [&] { return m_task_data->complete.load(); });
+            }
+            return *this;
+        }
+    };
+
+    template<> template<> void pl_task<size_t>::process<size_t>() {
+        size_t i;
+        switch (m_work_type) {
+            case PL_TASK_WORK_TYPE_FOR:
+                i = m_task_data->index++;
+                while (i < m_task_data->size) {
+                    if (!m_callback(i))
+                        m_task_data->index.exchange(m_task_data->size);
+                    i = m_task_data->index++;
+                }
+                return;
+            case PL_TASK_WORK_TYPE_FOREACH:
+                i = m_task_data->index++;
+
+                while (i < m_task_data->size) {
+                    if (!m_callback(m_data[i]))
+                        m_task_data->index.exchange(m_task_data->size);
+                    i = m_task_data->index++;
+                }
+                return;
+        }
     }
 
-    inline void delete_job(pl_job* _job) {
-        _job->clean();
-        delete _job;
+    template<typename T> pl_task<T> async_foreach(T* _data, size_t _size, const std::function<bool(T&)>& _callback, size_t _cores = std::thread::hardware_concurrency()) {
+        pl_task<T> task(_cores, _callback, _data, _size);
+        return task;
     }
 
-    /**
-    * Create a for job, blocks executing thread while waiting
-    * @param _start where to start
-    * @param _length length of array
-    * @param _callback callback to execute each instance
-    * @param _cores core type
-    */
-    inline void _for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
-        size_t i = 0;
-        auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
-        new_job->load();
-        new_job->start();
-        new_job->wait();
-        delete_job(new_job);
+    template<typename T> void foreach(T* _data, size_t _size, const std::function<bool(T&)>& _callback, size_t _cores = std::thread::hardware_concurrency()) {
+        pl_task<T> task(_cores, _callback, _data, _size);
+        task.start().wait();
     }
 
-    /**
-    * Create a foreach job, blocks executing thread while waiting
-    * @tparam T Data type
-    * @param _data pointer to data
-    * @param _length length of array
-    * @param _callback callback to execute each instance
-    * @param _cores core type
-    */
-    template<typename T> inline void _foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
-        auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
-        new_job->load();
-        new_job->start();
-        new_job->wait();
-        delete_job(new_job);
+    pl_task<size_t> async_for(size_t _start, size_t _size, const std::function<bool(size_t&)>& _callback, size_t _cores = std::thread::hardware_concurrency()) {
+        pl_task<size_t> task(_cores, _callback, _start, _size);
+        return task;
     }
 
-    /**
-     * Create a async for job, useful when repeating tasks
-     * @param _start where to start
-     * @param _length length of array
-     * @param _callback callback to execute each instance
-     * @param _cores core type
-     * @return returns pointer to job don't forget to delete it
-     */
-    inline pl_job* async_for(size_t _start, size_t _length, const std::function<bool(size_t&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
-        size_t i = 0;
-        auto new_job = create_job<size_t>(PL_TASK_TYPE_FOR, _start, _length, &i, _callback, _cores);
-        new_job->load();
-        return new_job;
-    }
-
-    /**
-     * Create a async foreach job, useful when repeating tasks
-     * @tparam T Data type
-     * @param _data pointer to data
-     * @param _length length of array
-     * @param _callback callback to execute each instance
-     * @param _cores core type
-     * @return returns pointer to job don't forget to delete it
-     */
-    template<typename T> inline pl_job* async_foreach(T* _data, size_t _length, const std::function<bool(T&)>& _callback, pl_cores _cores = PL_CORES_ALL) {
-        auto new_job = create_job<T>(PL_TASK_TYPE_FOREACH, 0, _length, _data, _callback, _cores);
-        new_job->load();
-        return new_job;
+    void _for(size_t _start, size_t _size, const std::function<bool(size_t&)>& _callback, size_t _cores = std::thread::hardware_concurrency()) {
+        pl_task<size_t> task(_cores, _callback, _start, _size);
+        task.start().wait();
     }
 }
 

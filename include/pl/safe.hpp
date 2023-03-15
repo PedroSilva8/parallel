@@ -17,7 +17,7 @@ namespace pl {
         }
 
 
-        safe(const safe<T>& t) : m_mtx(std::make_unique<std::mutex>()) {
+        safe(const safe<T>& t) : m_mtx(t.m_mtx) {
             m_value = t.m_value;
         }
 
@@ -28,6 +28,7 @@ namespace pl {
 
         safe<T>& operator=(const safe<T>& t) {
             m_value = t.m_value;
+            m_mtx = t.m_mtx;
             return *this;
         }
 
