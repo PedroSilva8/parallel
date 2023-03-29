@@ -8,25 +8,27 @@ namespace pl {
     template<typename T> class safe {
     private:
         T m_value;
-        std::unique_ptr<std::mutex> m_mtx;
+        std::shared_ptr<std::mutex> m_mtx;
     public:
-        safe() : m_mtx(std::make_unique<std::mutex>()) { };
+        safe() : m_mtx(std::make_shared<std::mutex>()) { };
 
-        safe(const T& t) : m_mtx(std::make_unique<std::mutex>()) {
+        explicit safe(const T& t) : m_mtx(std::make_shared<std::mutex>()) {
             m_value = t;
         }
-
 
         safe(const safe<T>& t) : m_mtx(t.m_mtx) {
             m_value = t.m_value;
         }
 
-        T& operator=(const T& t) {
+        safe<T>& operator=(const T& t) {
             m_value = t;
-            return m_value;
+            return *this;
         }
 
         safe<T>& operator=(const safe<T>& t) {
+            if (this == &t)
+                return *this;
+
             m_value = t.m_value;
             m_mtx = t.m_mtx;
             return *this;

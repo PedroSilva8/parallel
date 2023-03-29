@@ -10,9 +10,9 @@ namespace pl {
     ///wrapper vector to guarantee thread safety
     template<typename T> struct safe_vector : std::vector<T> {
     private:
-        std::unique_ptr<std::mutex> m_mtx;
+        std::shared_ptr<std::mutex> m_mtx;
     public:
-        safe_vector() : m_mtx(std::make_unique<std::mutex>()) { };
+        safe_vector() : m_mtx(std::make_shared<std::mutex>()) { };
         safe_vector(const safe_vector& _other) { std::copy(this->begin(), this->end(), _other.begin()); };
 
 
