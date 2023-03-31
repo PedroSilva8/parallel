@@ -13,7 +13,7 @@ namespace pl {
      * @tparam T key type
      * @tparam C get type
      */
-    template<typename T, typename C> struct safe_map : std::map<T, C> {
+    template<typename T, typename C> class safe_map : public std::map<T, C> {
     private:
         std::shared_ptr<std::mutex> m_mtx;
     public:
