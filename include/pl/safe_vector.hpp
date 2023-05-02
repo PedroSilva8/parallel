@@ -7,33 +7,38 @@
 
 namespace pl {
 
-    ///wrapper vector to guarantee thread safety
-    template<typename T> struct safe_vector : std::vector<T> {
+    template<typename T> class locked_vector {
     private:
         std::shared_ptr<std::mutex> m_mtx;
+        std::shared_ptr<std::vector<T>> m_vec;
     public:
-        safe_vector() : m_mtx(std::make_shared<std::mutex>()) { };
-        safe_vector(const safe_vector& _other) { std::copy(this->begin(), this->end(), _other.begin()); };
-
-
-        inline void lock() {
+        locked_vector(const std::shared_ptr<std::mutex>& _mtx, const std::shared_ptr<std::vector<T>>& _vec) : m_mtx(_mtx), m_vec(_vec) {
             m_mtx->lock();
         }
 
-        inline void unlock() {
+        ~locked_vector() {
             m_mtx->unlock();
         }
 
-        inline bool is_locked() {
-            auto result = m_mtx->try_lock();
-            if (result)
-                m_mtx->unlock();
-            return result;
-
+        std::vector<T>* get() const {
+            return m_vec.get();
         }
 
-        void erase_at(size_t index) {
-            std::vector<T>::erase(this->begin() + index);
+        std::vector<T>* operator->() {
+            return m_vec.get();
+        }
+    };
+
+    ///wrapper vector to guarantee thread safety
+    template<typename T> class safe_vector {
+    private:
+        std::shared_ptr<std::mutex> m_mtx;
+        std::shared_ptr<std::vector<T>> m_vec;
+    public:
+        safe_vector() : m_mtx(std::make_shared<std::mutex>()), m_vec(std::make_shared<std::vector<T>>()) { }
+
+        [[nodiscard]] inline locked_vector<T> lock() const {
+            return locked_vector<T>(m_mtx, m_vec);
         }
     };
 }
