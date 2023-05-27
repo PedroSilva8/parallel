@@ -5,62 +5,43 @@
 #include <mutex>
 
 namespace pl {
-    template<typename T> class safe {
+    template<typename T> class locked_safe {
     private:
-        T m_value;
         std::shared_ptr<std::mutex> m_mtx;
+        std::shared_ptr<T> m_deque;
     public:
-        safe() : m_mtx(std::make_shared<std::mutex>()) { };
-
-        explicit safe(const T& t) : m_mtx(std::make_shared<std::mutex>()) {
-            m_value = t;
-        }
-
-        safe(const safe<T>& t) : m_mtx(t.m_mtx) {
-            m_value = t.m_value;
-        }
-
-        safe<T>& operator=(const T& t) {
-            m_value = t;
-            return *this;
-        }
-
-        safe<T>& operator=(const safe<T>& t) {
-            if (this == &t)
-                return *this;
-
-            m_value = t.m_value;
-            m_mtx = t.m_mtx;
-            return *this;
-        }
-
-
-        [[nodiscard]] inline T& lock_get() {
-            lock();
-            return m_value;
-        }
-
-        [[nodiscard]] inline T& get() {
-            return m_value;
-        }
-
-        inline void set(T _value) {
-            m_value = _value;
-        }
-
-        inline void lock() {
+        locked_safe(const std::shared_ptr<std::mutex>& _mtx, const std::shared_ptr<T>& _deque) : m_mtx(_mtx), m_deque(_deque) {
             m_mtx->lock();
         }
 
-        inline void unlock() {
+        locked_safe(locked_safe<T>&& _move) noexcept = default;
+        locked_safe& operator=(locked_safe<T>&& _move) noexcept = default;
+
+        locked_safe(const locked_safe<T>& _copy) = delete;
+        locked_safe& operator=(const locked_safe<T>& _copy) = delete;
+
+        ~locked_safe() {
             m_mtx->unlock();
         }
 
-        inline bool is_locked() {
-            auto result = m_mtx->try_lock();
-            if (result)
-                m_mtx->unlock();
-            return result;
+        T* get() const {
+            return m_deque.get();
+        }
+
+        T* operator->() {
+            return m_deque.get();
+        }
+    };
+
+    template<typename T> class safe {
+    private:
+        std::shared_ptr<std::mutex> m_mtx;
+        std::shared_ptr<T> m_deque;
+    public:
+        safe() : m_mtx(std::make_shared<std::mutex>()), m_deque(std::make_shared<T>()) { }
+
+        [[nodiscard]] inline locked_safe<T> lock() const {
+            return locked_safe<T>(m_mtx, m_deque);
         }
     };
 }
